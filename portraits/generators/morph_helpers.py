@@ -115,18 +115,11 @@ def generate_morph_frames_wrapper(image_files, all_landmarks, morph_frames, visu
         for frame_idx in range(morph_frames + 1):
             alpha = frame_idx / morph_frames
             
-            # Create morphed frame
+            # Create morphed frame with optional visualization
             morphed_img = create_morphed_frame(
-                img1, img2, landmarks1, landmarks2, tri, alpha, height, width
+                img1, img2, landmarks1, landmarks2, tri, alpha, height, width, visualize=visualize_landmarks
             )
-            
-            # Visualize landmarks if requested
-            if visualize_landmarks:
-                for x, y in landmarks1.astype(int):
-                    cv2.circle(morphed_img, (x, y), 2, (0, 255, 0), -1)
-                for x, y in landmarks2.astype(int):
-                    cv2.circle(morphed_img, (x, y), 2, (255, 0, 0), -1)
-            
+
             morph_frames_data.append(morphed_img)
         
         # Write final frame

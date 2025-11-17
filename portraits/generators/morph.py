@@ -191,8 +191,20 @@ def warp_triangle(img, src_tri, dst_tri):
     return dst_rect_img, dst_rect
 
 
-def create_morphed_frame(img1, img2, landmarks1, landmarks2, tri, alpha, height, width):
-    """Create a morphed frame using proper triangle-based mesh morphing."""
+def create_morphed_frame(img1, img2, landmarks1, landmarks2, tri, alpha, height, width, visualize=False):
+    """Create a morphed frame using proper triangle-based mesh morphing.
+
+    Args:
+        img1: Source image
+        img2: Target image
+        landmarks1: Source landmarks
+        landmarks2: Target landmarks
+        tri: Delaunay triangulation
+        alpha: Morph progress (0.0 = img1, 1.0 = img2)
+        height: Image height
+        width: Image width
+        visualize: If True, draw landmarks and triangulation mesh on the morphed frame
+    """
     # Calculate interpolated landmarks for the morphed position
     interpolated_landmarks = (1.0 - alpha) * landmarks1 + alpha * landmarks2
 
@@ -259,6 +271,21 @@ def create_morphed_frame(img1, img2, landmarks1, landmarks2, tri, alpha, height,
         if mask.sum() > 0:
             mask_3d = np.stack([mask, mask, mask], axis=2)
             morphed[y1:y2, x1:x2] = region * (1 - mask_3d) + blended_region
+
+    # Visualize landmarks and mesh if requested
+    if visualize:
+        morphed = morphed.astype(np.uint8)
+
+        # Draw triangulation mesh
+        for triangle_indices in triangles:
+            pts = interpolated_landmarks[triangle_indices].astype(np.int32)
+            cv2.polylines(morphed, [pts], True, (0, 255, 0), 1, cv2.LINE_AA)
+
+        # Draw interpolated landmark points
+        for x, y in interpolated_landmarks.astype(int):
+            cv2.circle(morphed, (x, y), 2, (255, 255, 0), -1, cv2.LINE_AA)
+
+        return morphed
 
     return morphed.astype(np.uint8)
 
