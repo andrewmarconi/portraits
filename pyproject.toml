@@ -1,0 +1,28 @@
+[project]
+name = "portraits"
+version = "0.1.0"
+description = "Generate professional headshots using SDXL Turbo"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.0.0",
+    "diffusers>=0.24.0",
+    "transformers>=4.30.0",
+    "accelerate>=0.20.0",
+    "Pillow>=9.0.0",
+    "peft>=0.18.0",
+    "opencv-python>=4.12.0.88",
+    "scipy>=1.16.3",
+    "mediapipe>=0.10.14",
+    "sentencepiece>=0.1.99",
+    "protobuf>=3.20.0",
+    "ftfy>=6.0.0",
+    "snac>=1.0.0",
+    "soundfile>=0.12.0",
+    "gradio>=4.0.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "SkyReels-V2",
+]
