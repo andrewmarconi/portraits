@@ -39,49 +39,20 @@ MPS-Specific Notes:
 """
 
 import os
-import torch
-import numpy as np
-from pathlib import Path
 from datetime import datetime
+
+import numpy as np
+import torch
 from PIL import Image
-import warnings
+
+from portraits.core.config import config
+
+# Import shared modules
+from portraits.core.device import get_device_and_dtype
+from portraits.core.utils import ensure_output_dir
 
 # Enable MPS fallback for unsupported operations (Apple Silicon)
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
-
-# Suppress warnings
-warnings.filterwarnings("ignore")
-
-
-def get_device_and_dtype():
-    """Auto-detect optimal device and dtype for the current system."""
-    if torch.cuda.is_available():
-        device = "cuda"
-        dtype = torch.bfloat16
-        print(f"✓ Using CUDA GPU with bfloat16")
-        # Check VRAM
-        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        print(f"  Available VRAM: {vram_gb:.1f}GB")
-    elif torch.backends.mps.is_available():
-        device = "mps"
-        dtype = torch.float16
-        print(f"✓ Using Apple Silicon (MPS) with float16")
-        # Check PyTorch version for MPS compatibility
-        torch_version = torch.__version__.split('+')[0]  # Remove +cpu/+cu118 suffix
-        print(f"  PyTorch version: {torch_version}")
-        major, minor = map(int, torch_version.split('.')[:2])
-        if major < 2:
-            print(f"  ⚠ Warning: PyTorch {torch_version} has limited MPS support")
-            print(f"  Recommendation: Upgrade to PyTorch 2.0+ for better MPS performance")
-        print(f"  Note: MPS support for large video models may be experimental")
-        print(f"  Recommendation: Enable CPU offloading (default) for stability")
-    else:
-        device = "cpu"
-        dtype = torch.float16
-        print(f"⚠ Using CPU with float16 (will be slow)")
-        print(f"  Note: Video generation on CPU can take 30+ minutes")
-
-    return device, dtype
 
 
 def load_pipeline(model_id: str, device: str, dtype: torch.dtype, enable_offload: bool = True):
@@ -152,14 +123,14 @@ def load_pipeline(model_id: str, device: str, dtype: torch.dtype, enable_offload
 
     # Enable additional memory optimizations
     # These work across CUDA, MPS, and CPU
-    if hasattr(pipe, 'enable_attention_slicing'):
+    if hasattr(pipe, "enable_attention_slicing"):
         try:
             pipe.enable_attention_slicing()
             print("✓ Enabled attention slicing")
         except Exception as e:
             print(f"⚠ Could not enable attention slicing: {e}")
 
-    if hasattr(pipe, 'enable_vae_slicing'):
+    if hasattr(pipe, "enable_vae_slicing"):
         try:
             pipe.enable_vae_slicing()
             print("✓ Enabled VAE slicing")
@@ -180,15 +151,15 @@ def load_pipeline(model_id: str, device: str, dtype: torch.dtype, enable_offload
 
 def generate_video(
     prompt: str,
-    model_id: str = "./SkyReels-V2-T2V-14B-540P",
-    num_frames: int = 97,
-    width: int = 960,
-    height: int = 544,
-    fps: int = 24,
-    guidance_scale: float = 6.0,
-    num_inference_steps: int = 50,
-    enable_offload: bool = True,
-    output_dir: str = "output",
+    model_id: str = None,
+    num_frames: int = None,
+    width: int = None,
+    height: int = None,
+    fps: int = None,
+    guidance_scale: float = None,
+    num_inference_steps: int = None,
+    enable_offload: bool = None,
+    output_dir: str = None,
 ) -> str:
     """
     Generate a video from a text prompt using SkyReels-V2.
@@ -209,9 +180,28 @@ def generate_video(
     Returns:
         Path to the generated video file
     """
+    # Set defaults from config if not provided
+    if model_id is None:
+        model_id = config.get("models.skyreels_v2", "./SkyReels-V2-T2V-14B-540P")
+    if num_frames is None:
+        num_frames = config.get("video_generation.num_frames", 97)
+    if width is None:
+        width = config.get("video_generation.width", 960)
+    if height is None:
+        height = config.get("video_generation.height", 544)
+    if fps is None:
+        fps = config.get("video_generation.fps", 24)
+    if guidance_scale is None:
+        guidance_scale = config.get("video_generation.guidance_scale", 6.0)
+    if num_inference_steps is None:
+        num_inference_steps = config.get("video_generation.num_inference_steps", 50)
+    if enable_offload is None:
+        enable_offload = config.get("video_generation.enable_offload", True)
+    if output_dir is None:
+        output_dir = config.get("paths.output_dir", "output")
+
     # Create output directory
-    output_path = Path(output_dir)
-    output_path.mkdir(exist_ok=True)
+    output_path = ensure_output_dir(output_dir)
 
     # Get device and dtype
     device, dtype = get_device_and_dtype()
@@ -220,7 +210,7 @@ def generate_video(
     pipe = load_pipeline(model_id, device, dtype, enable_offload)
 
     print(f"\n{'='*60}")
-    print(f"Generating video...")
+    print("Generating video...")
     print(f"Prompt: {prompt}")
     print(f"Resolution: {width}x{height}")
     print(f"Frames: {num_frames} ({num_frames/fps:.1f}s at {fps}fps)")
@@ -267,6 +257,7 @@ def generate_video(
     # Try to use diffusers export utility
     try:
         from diffusers.utils import export_to_video
+
         export_to_video(frames, str(video_path), fps=fps)
         print(f"✓ Video saved using diffusers export: {video_path}")
     except ImportError:
@@ -274,13 +265,8 @@ def generate_video(
         import cv2
 
         print("⚠ Using OpenCV fallback for video export")
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        video_writer = cv2.VideoWriter(
-            str(video_path),
-            fourcc,
-            fps,
-            (width, height)
-        )
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        video_writer = cv2.VideoWriter(str(video_path), fourcc, fps, (width, height))
 
         for frame in frames:
             # Convert PIL Image to numpy array (RGB to BGR for OpenCV)
@@ -298,7 +284,7 @@ def generate_video(
     # Print video info
     duration = num_frames / fps
     print(f"\n{'='*60}")
-    print(f"✓ Generation complete!")
+    print("✓ Generation complete!")
     print(f"Duration: {duration:.1f} seconds")
     print(f"File: {video_path}")
     print(f"{'='*60}\n")
@@ -328,14 +314,14 @@ def main():
     # MPS users: Keep enable_offload=True for best stability
     settings = {
         "model_id": "./SkyReels-V2-T2V-14B-540P",  # Local path to downloaded model
-        "num_frames": 97,           # ~4 seconds at 24fps (97/24 ≈ 4.04s)
-                                     # For MPS with limited memory, try 49 frames (~2s)
-        "width": 960,               # 540P resolution
+        "num_frames": 97,  # ~4 seconds at 24fps (97/24 ≈ 4.04s)
+        # For MPS with limited memory, try 49 frames (~2s)
+        "width": 960,  # 540P resolution
         "height": 544,
         "fps": 24,
-        "guidance_scale": 6.0,      # CFG scale - higher = more prompt adherence
+        "guidance_scale": 6.0,  # CFG scale - higher = more prompt adherence
         "num_inference_steps": 50,  # More steps = higher quality but slower
-        "enable_offload": True,     # Essential for <43GB VRAM systems (CUDA/MPS)
+        "enable_offload": True,  # Essential for <43GB VRAM systems (CUDA/MPS)
     }
 
     print("SkyReels-V2 Text-to-Video Generator")

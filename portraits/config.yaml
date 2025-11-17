@@ -1,0 +1,87 @@
+# Portraits Configuration File
+# Edit these values to customize default behavior
+
+# Model paths
+models:
+  # Image generation (SDXL Turbo)
+  sdxl_turbo: "stabilityai/sdxl-turbo"
+
+  # Text-to-video generation (SkyReels-V2)
+  skyreels_v2: "./SkyReels-V2-T2V-14B-540P"
+
+  # Text-to-speech (Maya1)
+  maya1: "maya-research/maya1"
+  maya1_tokenizer: "maya-research/maya1"
+
+  # SNAC neural codec for voice
+  snac: "hubertsiuzdak/snac_24khz"
+
+# File paths
+paths:
+  # Output directory for all generated content
+  output_dir: "output"
+
+  # Hugging Face cache location (uses HF_HOME env var if set)
+  hf_cache: "${HF_HOME:~/.cache/huggingface}"
+
+  # Default LoRA path (can be overridden)
+  default_lora: null
+
+# Default parameters for image generation
+image_generation:
+  width: 512
+  height: 512
+  num_inference_steps: 2  # SDXL Turbo optimized
+  guidance_scale: -100     # Disabled for Turbo (-100)
+  clip_skip: 1
+  num_images: 1
+  lora_scale: 1.0
+  variant: "fp16"
+
+# Default parameters for video generation
+video_generation:
+  # Frame settings
+  num_frames: 97           # ~4 seconds at 24fps
+  fps: 24
+
+  # Resolution (540P)
+  width: 960
+  height: 544
+
+  # Generation quality
+  guidance_scale: 6.0
+  num_inference_steps: 50
+
+  # Memory optimization
+  enable_offload: true
+  enable_attention_slicing: true
+  enable_vae_slicing: true
+
+# Default parameters for voice generation
+voice_generation:
+  # Sampling parameters
+  temperature: 0.4         # Lower = more consistent
+  top_p: 0.9              # Nucleus sampling
+  max_tokens: 2048        # ~20-30 seconds of audio
+
+  # Audio settings
+  sample_rate: 24000      # 24kHz mono
+
+  # Default voice description
+  default_voice: "medium pitch, warm, conversational"
+
+# Default parameters for mesh morphing
+mesh_morphing:
+  fps: 24
+  morph_frames: 8          # Frames between each image
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+  max_num_faces: 1
+  refine_landmarks: true   # Include iris landmarks
+  visualize_landmarks: false
+
+# Logging and debugging
+logging:
+  level: "INFO"           # DEBUG, INFO, WARNING, ERROR
+  show_warnings: false
+  show_progress: true

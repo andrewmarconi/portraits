@@ -4,18 +4,23 @@ Create professional facial mesh morphing videos using MediaPipe Face Mesh.
 This uses 468 facial landmarks for precise mesh-based morphing.
 """
 
-import os
-import cv2
-import numpy as np
 from pathlib import Path
+
+import cv2
 import mediapipe as mp
+import numpy as np
+
+# Import refactored function
+from .morph_refactored import create_mesh_morphing_video
 from scipy.spatial import Delaunay
-import warnings
-warnings.filterwarnings('ignore')
+
+# Import shared modules
+from portraits.core.config import config
 
 # Initialize MediaPipe Face Mesh and Pose
 mp_face_mesh = mp.solutions.face_mesh
 mp_pose = mp.solutions.pose
+
 
 def detect_face_landmarks(image, face_mesh):
     """
@@ -55,6 +60,7 @@ def detect_face_landmarks(image, face_mesh):
 
     return np.array(landmarks, dtype=np.float32)
 
+
 def detect_pose_landmarks(image, pose_detector):
     """
     Detect body pose landmarks, focusing on shoulders and torso.
@@ -85,8 +91,8 @@ def detect_pose_landmarks(image, pose_detector):
     pose_points = []
 
     relevant_indices = [
-        7,   # Left ear (helps with hair region)
-        8,   # Right ear (helps with hair region)
+        7,  # Left ear (helps with hair region)
+        8,  # Right ear (helps with hair region)
         11,  # Left shoulder
         12,  # Right shoulder
         23,  # Left hip
@@ -107,6 +113,7 @@ def detect_pose_landmarks(image, pose_detector):
                 pose_points.append([x, y])
 
     return pose_points
+
 
 def add_hair_region_points(face_landmarks, img_shape, num_points=12):
     """
@@ -154,13 +161,22 @@ def add_hair_region_points(face_landmarks, img_shape, num_points=12):
         for col in range(cols):
             if points_added >= num_points:
                 break
-            x = int(hair_left + (hair_right - hair_left) * col / (cols - 1)) if cols > 1 else (hair_left + hair_right) // 2
+            x = (
+                int(hair_left + (hair_right - hair_left) * col / (cols - 1))
+                if cols > 1
+                else (hair_left + hair_right) // 2
+            )
             hair_points.append([x, y])
             points_added += 1
         if points_added >= num_points:
             break
 
-    return np.array(hair_points, dtype=np.float32) if hair_points else np.array([], dtype=np.float32).reshape(0, 2)
+    return (
+        np.array(hair_points, dtype=np.float32)
+        if hair_points
+        else np.array([], dtype=np.float32).reshape(0, 2)
+    )
+
 
 def combine_all_landmarks(face_landmarks, pose_points, img_shape):
     """
@@ -189,6 +205,7 @@ def combine_all_landmarks(face_landmarks, pose_points, img_shape):
 
     return all_landmarks
 
+
 def add_boundary_points(landmarks, img_shape):
     """
     Add boundary points to ensure the entire image is covered by triangulation.
@@ -203,25 +220,32 @@ def add_boundary_points(landmarks, img_shape):
     h, w = img_shape[:2]
 
     # Add corners
-    corners = np.array([
-        [0, 0],           # Top-left
-        [w-1, 0],         # Top-right
-        [w-1, h-1],       # Bottom-right
-        [0, h-1],         # Bottom-left
-    ], dtype=np.float32)
+    corners = np.array(
+        [
+            [0, 0],  # Top-left
+            [w - 1, 0],  # Top-right
+            [w - 1, h - 1],  # Bottom-right
+            [0, h - 1],  # Bottom-left
+        ],
+        dtype=np.float32,
+    )
 
     # Add edge midpoints for better triangulation
-    edge_points = np.array([
-        [w//2, 0],        # Top-middle
-        [w-1, h//2],      # Right-middle
-        [w//2, h-1],      # Bottom-middle
-        [0, h//2],        # Left-middle
-    ], dtype=np.float32)
+    edge_points = np.array(
+        [
+            [w // 2, 0],  # Top-middle
+            [w - 1, h // 2],  # Right-middle
+            [w // 2, h - 1],  # Bottom-middle
+            [0, h // 2],  # Left-middle
+        ],
+        dtype=np.float32,
+    )
 
     # Combine all points
     extended_landmarks = np.vstack([landmarks, corners, edge_points])
 
     return extended_landmarks
+
 
 def create_delaunay_triangulation(points):
     """
@@ -243,6 +267,7 @@ def create_delaunay_triangulation(points):
         print(f"    ⚠️  Delaunay triangulation failed: {e}")
         return np.array([], dtype=np.int32)
 
+
 def apply_affine_transform(src, src_tri, dst_tri, size):
     """
     Apply affine transform calculated using src_tri and dst_tri to src.
@@ -260,11 +285,12 @@ def apply_affine_transform(src, src_tri, dst_tri, size):
     warp_mat = cv2.getAffineTransform(np.float32(src_tri), np.float32(dst_tri))
 
     # Apply the affine transformation
-    dst = cv2.warpAffine(src, warp_mat, size,
-                        flags=cv2.INTER_LINEAR,
-                        borderMode=cv2.BORDER_REFLECT_101)
+    dst = cv2.warpAffine(
+        src, warp_mat, size, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101
+    )
 
     return dst
+
 
 def morph_triangle(img1, img2, img_morph, tri1, tri2, tri_morph, alpha):
     """
@@ -299,8 +325,8 @@ def morph_triangle(img1, img2, img_morph, tri1, tri2, tri_morph, alpha):
     cv2.fillConvexPoly(mask, np.int32(tri_morph_rect), (1.0, 1.0, 1.0), 16, 0)
 
     # Extract image patches
-    img1_rect = img1[r1[1]:r1[1] + r1[3], r1[0]:r1[0] + r1[2]]
-    img2_rect = img2[r2[1]:r2[1] + r2[3], r2[0]:r2[0] + r2[2]]
+    img1_rect = img1[r1[1] : r1[1] + r1[3], r1[0] : r1[0] + r1[2]]
+    img2_rect = img2[r2[1] : r2[1] + r2[3], r2[0] : r2[0] + r2[2]]
 
     size = (r_morph[2], r_morph[3])
 
@@ -312,8 +338,12 @@ def morph_triangle(img1, img2, img_morph, tri1, tri2, tri_morph, alpha):
     img_morph_rect = (1.0 - alpha) * warp_image1 + alpha * warp_image2
 
     # Copy triangular region of the morphed image to the output image
-    img_morph[r_morph[1]:r_morph[1] + r_morph[3], r_morph[0]:r_morph[0] + r_morph[2]] = \
-        img_morph[r_morph[1]:r_morph[1] + r_morph[3], r_morph[0]:r_morph[0] + r_morph[2]] * (1 - mask) + img_morph_rect * mask
+    img_morph[r_morph[1] : r_morph[1] + r_morph[3], r_morph[0] : r_morph[0] + r_morph[2]] = (
+        img_morph[r_morph[1] : r_morph[1] + r_morph[3], r_morph[0] : r_morph[0] + r_morph[2]]
+        * (1 - mask)
+        + img_morph_rect * mask
+    )
+
 
 def create_morphed_frame(img1, img2, landmarks1, landmarks2, alpha):
     """
@@ -363,15 +393,94 @@ def create_morphed_frame(img1, img2, landmarks1, landmarks2, alpha):
         # Morph one triangle
         try:
             morph_triangle(img1, img2, img_morph, tri1, tri2, tri_morph, alpha)
-        except Exception as e:
+        except Exception:
             # Skip problematic triangles silently
             continue
 
     return img_morph
 
-def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morphing_video.mp4",
-                               fps=24, morph_frames=8, reverse=False, visualize_landmarks=False):
-    """
+
+def _validate_morph_inputs(input_dir, output_file, fps, morph_frames):
+    """Validate morphing video inputs."""
+    if not input_dir or not output_dir:
+        print("❌ Input directory and output file are required")
+        return False
+    
+    if fps <= 0 or fps > 60:
+        print("❌ FPS must be between 1 and 60")
+        return False
+    
+    if morph_frames < 1 or morph_frames > 30:
+        print("❌ Morph frames must be between 1 and 30")
+        return False
+    
+    return True
+
+
+def _get_and_sort_images(input_dir, reverse):
+    """Get and sort image files from directory."""
+    image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]
+    image_files = []
+    
+    for ext in image_extensions:
+        image_files.extend(Path(input_dir).glob(f"*{ext}"))
+        image_files.extend(Path(input_dir).glob(f"*{ext.upper()}"))
+    
+    if not image_files:
+        print(f"❌ No images found in {input_dir}")
+        return []
+    
+    # Sort files by name
+    image_files.sort()
+    
+    if reverse:
+        image_files.reverse()
+    
+    return image_files
+
+
+#!/usr/bin/env python3
+"""
+Create a professional mesh-based facial morphing video using MediaPipe.
+This uses 468 facial landmarks for precise mesh-based morphing.
+"""
+
+from pathlib import Path
+
+import cv2
+import mediapipe as mp
+import numpy as np
+
+# Import refactored function
+from .morph_refactored import create_mesh_morphing_video
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="Create professional mesh-based facial morphing videos"
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    parser.add_argument("--input", required=True, help="Directory containing images")
+    parser.add_argument("--output", required=True, help="Output video file path")
+    parser.add_argument("--fps", type=int, default=24, help="Frames per second")
+    parser.add_argument("--morph-frames", type=int, default=8, help="Morph frames between images")
+    parser.add_argument("--reverse", action="store_true", help="Reverse image order")
+    parser.add_argument("--visualize", action="store_true", help="Visualize landmarks")
+    
+    args = parser.parse_args()
+    
+    success = create_mesh_morphing_video(
+        input_dir=args.input,
+        output_file=args.output,
+        fps=args.fps,
+        morph_frames=args.morph_frames,
+        reverse=args.reverse,
+        visualize_landmarks=args.visualize,
+    )
+    
+    exit(0 if success else 1)
     Create a professional mesh-based facial morphing video using MediaPipe.
     Includes face (468 landmarks), shoulders (pose detection), and hair region points.
 
@@ -383,8 +492,14 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
         reverse (bool): Whether to reverse the image order
         visualize_landmarks (bool): Draw landmarks on frames for debugging
     """
+    # Set defaults from config if not provided
+    if fps is None:
+        fps = config.get("mesh_morphing.fps", 24)
+    if morph_frames is None:
+        morph_frames = config.get("mesh_morphing.morph_frames", 8)
+
     # Get all image files in directory
-    image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
+    image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]
     image_files = []
 
     for ext in image_extensions:
@@ -407,9 +522,9 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
 
     print(f"✅ Found {len(image_files)} images")
     print(f"🎬 Generating {morph_frames} mesh morph frames between each pair")
-    print(f"📊 Using MediaPipe Face Mesh (468 facial landmarks)")
-    print(f"📊 Using MediaPipe Pose (shoulder/body detection)")
-    print(f"📊 Adding hair region points for complete coverage")
+    print("📊 Using MediaPipe Face Mesh (468 facial landmarks)")
+    print("📊 Using MediaPipe Pose (shoulder/body detection)")
+    print("📊 Adding hair region points for complete coverage")
 
     # Read first image to get dimensions
     first_image = cv2.imread(str(image_files[0]))
@@ -421,10 +536,11 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
     print(f"📐 Video dimensions: {width}x{height}")
 
     # Create output directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    output_dir = Path(output_file).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize video writer
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter.fourcc(*"mp4v")
     video_writer = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
 
     if not video_writer.isOpened():
@@ -433,17 +549,18 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
 
     # Initialize MediaPipe Face Mesh and Pose
     print("🔧 Initializing MediaPipe Face Mesh and Pose detectors...")
-    with mp_face_mesh.FaceMesh(
-        static_image_mode=True,
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    ) as face_mesh, mp_pose.Pose(
-        static_image_mode=True,
-        model_complexity=1,
-        min_detection_confidence=0.5
-    ) as pose_detector:
+    with (
+        mp_face_mesh.FaceMesh(
+            static_image_mode=True,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        ) as face_mesh,
+        mp_pose.Pose(
+            static_image_mode=True, model_complexity=1, min_detection_confidence=0.5
+        ) as pose_detector,
+    ):
 
         # Process each pair of consecutive images
         for i in range(len(image_files) - 1):
@@ -454,10 +571,10 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
 
             # Load current and next images
             img1 = cv2.imread(str(image_files[i]))
-            img2 = cv2.imread(str(image_files[i+1]))
+            img2 = cv2.imread(str(image_files[i + 1]))
 
             if img1 is None or img2 is None:
-                print(f"⚠️  Warning: Could not read images, skipping...")
+                print("⚠️  Warning: Could not read images, skipping...")
                 continue
 
             # Resize if dimensions don't match
@@ -488,13 +605,18 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
             pose_points2 = detect_pose_landmarks(img2, pose_detector)
 
             # Only use pose landmarks if BOTH images have them AND counts match
-            use_pose = (len(pose_points1) > 0 and len(pose_points2) > 0 and
-                       len(pose_points1) == len(pose_points2))
+            use_pose = (
+                len(pose_points1) > 0
+                and len(pose_points2) > 0
+                and len(pose_points1) == len(pose_points2)
+            )
             if use_pose:
                 print(f"✅ Detected {len(pose_points1)} pose landmarks in both images")
             else:
                 if len(pose_points1) != len(pose_points2):
-                    print(f"⚠️  Pose landmark count mismatch ({len(pose_points1)} vs {len(pose_points2)})")
+                    print(
+                        f"⚠️  Pose landmark count mismatch ({len(pose_points1)} vs {len(pose_points2)})"
+                    )
                 print("⚠️  Using face + hair landmarks only (pose excluded)")
                 pose_points1 = []
                 pose_points2 = []
@@ -530,7 +652,7 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
             # Generate mesh morph frames
             for step in range(1, morph_frames + 1):
                 alpha = step / (morph_frames + 1)
-                print(f"   📹 Morphing frame {step}/{morph_frames} (α={alpha:.2f})...", end=' ')
+                print(f"   📹 Morphing frame {step}/{morph_frames} (α={alpha:.2f})...", end=" ")
 
                 # Create morphed frame using mesh warping
                 morphed = create_morphed_frame(img1, img2, landmarks1, landmarks2, alpha)
@@ -563,22 +685,23 @@ def create_mesh_morphing_video(input_dir="output", output_file="output/mesh_morp
     video_writer.release()
 
     print(f"\n{'='*70}")
-    print(f"✅ MESH MORPHING VIDEO COMPLETED!")
+    print("✅ MESH MORPHING VIDEO COMPLETED!")
     print(f"{'='*70}")
     print(f"📁 Saved to: {output_file}")
     print(f"{'='*70}\n")
 
     return True
 
+
 if __name__ == "__main__":
-    print("="*70)
+    print("=" * 70)
     print("🎭 PROFESSIONAL MESH-BASED FACIAL MORPHING")
-    print("="*70)
+    print("=" * 70)
     print("✨ MediaPipe Face Mesh: 468 facial landmark points")
     print("✨ MediaPipe Pose: Shoulder and body detection")
     print("✨ Hair Region: Strategic points above face")
     print("✨ Delaunay triangulation for smooth mesh warping")
-    print("="*70)
+    print("=" * 70)
 
     # Create mesh morphing video
     success = create_mesh_morphing_video(
@@ -586,13 +709,124 @@ if __name__ == "__main__":
         output_file="output/mesh_morphing_video.mp4",
         fps=12,
         morph_frames=6,
-        visualize_landmarks=False  # Set to True to see landmarks
+        visualize_landmarks=False,  # Set to True to see landmarks
     )
 
+    def _detect_all_landmarks(image_files):
+    """Detect all landmarks for all images."""
+    all_landmarks = []
+    
+    for i, img_path in enumerate(image_files):
+        print(f"🔍 Processing {img_path.name} ({i+1}/{len(image_files)})")
+        
+        # Detect face landmarks
+        face_landmarks = detect_face_landmarks(str(img_path))
+        if face_landmarks is None:
+            print(f"❌ No face detected in {img_path.name}")
+            return None
+        
+        # Detect pose landmarks
+        pose_landmarks = detect_pose_landmarks(str(img_path))
+        
+        # Add hair region points
+        img = cv2.imread(str(img_path))
+        height, width = img.shape[:2]
+        hair_points = add_hair_region_points(face_landmarks, height, width)
+        
+        # Combine all landmarks
+        all_points = combine_all_landmarks(face_landmarks, pose_landmarks, hair_points)
+        all_landmarks.append(all_points)
+    
+    return all_landmarks
+
+
+def _generate_morph_frames(image_files, all_landmarks, morph_frames, visualize_landmarks):
+    """Generate all morph frames between image pairs."""
+    if len(image_files) < 2:
+        print("❌ Need at least 2 images for morphing")
+        return []
+    
+    morph_frames_data = []
+    total_pairs = len(image_files) - 1
+    
+    for i in range(total_pairs):
+        img1_path = image_files[i]
+        img2_path = image_files[i + 1]
+        
+        print(f"🎬 Processing pair {i+1}/{total_pairs}: {img1_path.name} → {img2_path.name}")
+        
+        # Load images
+        img1 = cv2.imread(str(img1_path))
+        img2 = cv2.imread(str(img2_path))
+        
+        if img1 is None or img2 is None:
+            print(f"❌ Could not read images, skipping...")
+            continue
+        
+        # Get landmarks
+        landmarks1 = all_landmarks[i]
+        landmarks2 = all_landmarks[i + 1]
+        
+        # Create triangulation
+        height, width = img1.shape[:2]
+        points1 = landmarks1.astype(np.float32)
+        points2 = landmarks2.astype(np.float32)
+        
+        tri = create_delaunay_triangulation(points1, height, width)
+        
+        # Generate morph frames
+        for frame_idx in range(morph_frames + 1):
+            alpha = frame_idx / morph_frames
+            
+            # Create morphed frame
+            morphed_img = create_morphed_frame(
+                img1, img2, landmarks1, landmarks2, tri, alpha, height, width
+            )
+            
+            # Visualize landmarks if requested
+            if visualize_landmarks:
+                for x, y in landmarks1.astype(int):
+                    cv2.circle(morphed_img, (x, y), 2, (0, 255, 0), -1)
+                for x, y in landmarks2.astype(int):
+                    cv2.circle(morphed_img, (x, y), 2, (255, 0, 0), -1)
+            
+            morph_frames_data.append(morphed_img)
+        
+        # Write final frame
+        morph_frames_data.append(img2)
+    
+    return morph_frames_data
+
+
+def _save_morph_video(morph_frames_data, output_file, fps):
+    """Save morph frames as video."""
+    try:
+        height, width = morph_frames_data[0].shape[:2]
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+        
+        total_frames = len(morph_frames_data)
+        print(f"💾 Saving {total_frames} frames to {output_file}")
+        
+        for i, frame in enumerate(morph_frames_data):
+            video_writer.write(frame)
+            if (i + 1) % 10 == 0:
+                print(f"  Processed {i+1}/{total_frames} frames ({((i+1)/total_frames)*100:.1f}%)")
+        
+        video_writer.release()
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error saving video: {e}")
+        return False
+
+
+def _report_morph_results(success, num_images, morph_frames, output_file):
+    """Report morphing results."""
     if success:
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("🎉 SUCCESS! PROFESSIONAL MORPHING COMPLETED!")
-        print("="*70)
+        print("=" * 70)
         print("\n✨ Features:")
         print("  ✅ 468 facial landmarks per face (eyes, nose, mouth, contours)")
         print("  ✅ Shoulder and body pose landmarks")
@@ -606,6 +840,28 @@ if __name__ == "__main__":
         print("  • Shoulders and body moving seamlessly")
         print("  • Complete portrait morphing, not just face")
         print("  • Professional mesh-based warping")
-        print("="*70)
+        print("=" * 70)
+    else:
+        print("\n❌ Failed to create mesh morphing video.")
+
+
+if success:
+        print("\n" + "=" * 70)
+        print("🎉 SUCCESS! PROFESSIONAL MORPHING COMPLETED!")
+        print("=" * 70)
+        print("\n✨ Features:")
+        print("  ✅ 468 facial landmarks per face (eyes, nose, mouth, contours)")
+        print("  ✅ Shoulder and body pose landmarks")
+        print("  ✅ Hair region coverage (strategic grid points)")
+        print("  ✅ Delaunay triangulation mesh")
+        print("  ✅ Affine transformation per triangle")
+        print("  ✅ Smooth vertex interpolation")
+        print("\n🎬 Your morphing video shows:")
+        print("  • Face features smoothly transitioning (eyes, nose, mouth)")
+        print("  • Hair flowing and morphing naturally")
+        print("  • Shoulders and body moving seamlessly")
+        print("  • Complete portrait morphing, not just face")
+        print("  • Professional mesh-based warping")
+        print("=" * 70)
     else:
         print("\n❌ Failed to create mesh morphing video.")

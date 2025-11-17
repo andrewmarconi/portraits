@@ -1,28 +1,140 @@
 [project]
 name = "portraits"
 version = "0.1.0"
-description = "Generate professional headshots using SDXL Turbo"
+description = "Multimodal AI generation suite: images, videos, speech, and morphing"
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [
+    {name = "Andrew Marconi", email = "hello@559labs.com"}
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# Minimal core dependencies
 dependencies = [
     "torch>=2.0.0",
-    "diffusers>=0.24.0",
-    "transformers>=4.30.0",
-    "accelerate>=0.20.0",
+    "numpy>=1.24.0",
     "Pillow>=9.0.0",
-    "peft>=0.18.0",
-    "opencv-python>=4.12.0.88",
-    "scipy>=1.16.3",
-    "mediapipe>=0.10.14",
-    "sentencepiece>=0.1.99",
-    "protobuf>=3.20.0",
-    "ftfy>=6.0.0",
-    "snac>=1.0.0",
-    "soundfile>=0.12.0",
+    "pyyaml>=6.0.3",
     "gradio>=4.0.0",
 ]
 
-[tool.uv.workspace]
-members = [
-    "SkyReels-V2",
+[project.optional-dependencies]
+# Image generation with SDXL Turbo
+image = [
+    "diffusers>=0.24.0",
+    "transformers>=4.30.0",
+    "accelerate>=0.20.0",
+    "peft>=0.18.0",
 ]
+
+# Text-to-video generation with SkyReels-V2
+video = [
+    "diffusers>=0.24.0",
+    "transformers>=4.30.0",
+    "accelerate>=0.20.0",
+]
+
+# Text-to-speech with Maya1
+voice = [
+    "transformers>=4.30.0",
+    "snac>=1.0.0",
+    "soundfile>=0.12.0",
+    "sentencepiece>=0.1.99",
+    "protobuf>=3.20.0",
+    "ftfy>=6.0.0",
+]
+
+# Video morphing with MediaPipe
+morph = [
+    "opencv-python>=4.12.0.88",
+    "scipy>=1.16.3",
+    "mediapipe>=0.10.14",
+]
+
+# Gradio web interface
+ui = [
+    "gradio>=4.0.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+# Install all features
+all = [
+    "portraits[image,video,voice,morph,ui]",
+]
+
+[project.scripts]
+portraits = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/andrewmarconi/portraits"
+Documentation = "https://github.com/andrewmarconi/portraits/blob/main/CLAUDE.md"
+Repository = "https://github.com/andrewmarconi/portraits"
+
+# [tool.uv.workspace]
+# members = [
+#     "SkyReels-V2",
+# ]
+
+# [tool.uv]
+# package = true
+
+# Code quality tools
+[tool.black]
+line-length = 100
+target-version = ['py311']
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+]
+
+[tool.ruff.isort]
+known-first-party = ["portraits"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.pytest.ini_options]
+testpaths = ["portraits/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=portraits --cov-report=html --cov-report=term"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+disallow_untyped_defs = false  # Enable gradually

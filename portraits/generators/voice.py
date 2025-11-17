@@ -29,24 +29,24 @@ Features:
     - Streaming capability (sub-100ms latency with vLLM)
 """
 
-import os
-import torch
-import numpy as np
-from pathlib import Path
 from datetime import datetime
-from typing import List, Tuple
-import warnings
 
-# Suppress warnings
-warnings.filterwarnings("ignore")
+import numpy as np
+import torch
+
+from portraits.core.config import config
+
+# Import shared modules
+from portraits.core.device import get_device_and_dtype
+from portraits.core.utils import ensure_output_dir
 
 # Maya1 Token Constants
-SOH_ID = 128259           # Start of Header
-EOH_ID = 128260           # End of Header
-SOA_ID = 128261           # Start of Audio
+SOH_ID = 128259  # Start of Header
+EOH_ID = 128260  # End of Header
+SOA_ID = 128261  # Start of Audio
 CODE_START_TOKEN_ID = 128257
 CODE_END_TOKEN_ID = 128258
-TEXT_EOT_ID = 128009      # Text End of Transmission
+TEXT_EOT_ID = 128009  # Text End of Transmission
 CODE_TOKEN_OFFSET = 128266
 SNAC_MIN_ID = 128266
 SNAC_MAX_ID = 156937
@@ -54,33 +54,7 @@ SNAC_TOKENS_PER_FRAME = 7
 BOS_ID = 128000
 
 
-def get_device_and_dtype():
-    """Auto-detect optimal device and dtype for the current system."""
-    if torch.cuda.is_available():
-        device = "cuda"
-        dtype = torch.bfloat16
-        print(f"✓ Using CUDA GPU with bfloat16")
-        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        print(f"  Available VRAM: {vram_gb:.1f}GB")
-        if vram_gb < 16:
-            print(f"  ⚠ Warning: Maya1 recommends 16GB+ VRAM for optimal performance")
-    elif torch.backends.mps.is_available():
-        device = "mps"
-        dtype = torch.float16
-        print(f"✓ Using Apple Silicon (MPS) with float16")
-        torch_version = torch.__version__.split('+')[0]
-        print(f"  PyTorch version: {torch_version}")
-        print(f"  Note: Maya1 on MPS may be slower than CUDA")
-    else:
-        device = "cpu"
-        dtype = torch.float16
-        print(f"⚠ Using CPU with float16 (will be very slow)")
-        print(f"  Note: Voice generation on CPU can take several minutes")
-
-    return device, dtype
-
-
-def extract_snac_codes(token_ids: List[int]) -> List[int]:
+def extract_snac_codes(token_ids: list[int]) -> list[int]:
     """
     Extract SNAC audio codes from generated tokens.
 
@@ -96,14 +70,13 @@ def extract_snac_codes(token_ids: List[int]) -> List[int]:
         eos_idx = len(token_ids)
 
     snac_codes = [
-        token_id for token_id in token_ids[:eos_idx]
-        if SNAC_MIN_ID <= token_id <= SNAC_MAX_ID
+        token_id for token_id in token_ids[:eos_idx] if SNAC_MIN_ID <= token_id <= SNAC_MAX_ID
     ]
 
     return snac_codes
 
 
-def unpack_snac_from_7(snac_tokens: List[int]) -> List[List[int]]:
+def unpack_snac_from_7(snac_tokens: list[int]) -> list[list[int]]:
     """
     Unpack 7-token SNAC frames into 3 hierarchical levels.
 
@@ -121,7 +94,7 @@ def unpack_snac_from_7(snac_tokens: List[int]) -> List[List[int]]:
         snac_tokens = snac_tokens[:-1]
 
     frames = len(snac_tokens) // SNAC_TOKENS_PER_FRAME
-    snac_tokens = snac_tokens[:frames * SNAC_TOKENS_PER_FRAME]
+    snac_tokens = snac_tokens[: frames * SNAC_TOKENS_PER_FRAME]
 
     if frames == 0:
         return [[], [], []]
@@ -129,14 +102,17 @@ def unpack_snac_from_7(snac_tokens: List[int]) -> List[List[int]]:
     l1, l2, l3 = [], [], []
 
     for i in range(frames):
-        slots = snac_tokens[i*7:(i+1)*7]
+        slots = snac_tokens[i * 7 : (i + 1) * 7]
         l1.append((slots[0] - CODE_TOKEN_OFFSET) % 4096)
-        l2.extend([(slots[1] - CODE_TOKEN_OFFSET) % 4096,
-                   (slots[4] - CODE_TOKEN_OFFSET) % 4096])
-        l3.extend([(slots[2] - CODE_TOKEN_OFFSET) % 4096,
-                   (slots[3] - CODE_TOKEN_OFFSET) % 4096,
-                   (slots[5] - CODE_TOKEN_OFFSET) % 4096,
-                   (slots[6] - CODE_TOKEN_OFFSET) % 4096])
+        l2.extend([(slots[1] - CODE_TOKEN_OFFSET) % 4096, (slots[4] - CODE_TOKEN_OFFSET) % 4096])
+        l3.extend(
+            [
+                (slots[2] - CODE_TOKEN_OFFSET) % 4096,
+                (slots[3] - CODE_TOKEN_OFFSET) % 4096,
+                (slots[5] - CODE_TOKEN_OFFSET) % 4096,
+                (slots[6] - CODE_TOKEN_OFFSET) % 4096,
+            ]
+        )
 
     return [l1, l2, l3]
 
@@ -170,17 +146,17 @@ def build_prompt_ids(tokenizer, description: str, text: str) -> torch.Tensor:
 
     # Build the complete sequence with special tokens as IDs
     prompt_ids = (
-        [SOH_ID] +           # Start of Header
-        [BOS_ID] +           # Begin of Sequence
-        text_tokens +        # Text content with description
-        [TEXT_EOT_ID] +      # End of Text
-        [EOH_ID] +           # End of Header
-        [SOA_ID] +           # Start of Audio
-        [CODE_START_TOKEN_ID]  # Start of Code (audio tokens)
+        [SOH_ID]  # Start of Header
+        + [BOS_ID]  # Begin of Sequence
+        + text_tokens  # Text content with description
+        + [TEXT_EOT_ID]  # End of Text
+        + [EOH_ID]  # End of Header
+        + [SOA_ID]  # Start of Audio
+        + [CODE_START_TOKEN_ID]  # Start of Code (audio tokens)
     )
 
     # Debug: Print token structure
-    print(f"Debug - Prompt token sequence:")
+    print("Debug - Prompt token sequence:")
     print(f"  Total tokens: {len(prompt_ids)}")
     print(f"  First 10 token IDs: {prompt_ids[:10]}")
     print(f"  Last 5 token IDs: {prompt_ids[-5:]}")
@@ -188,7 +164,7 @@ def build_prompt_ids(tokenizer, description: str, text: str) -> torch.Tensor:
 
     # Decode to verify what the model will see
     decoded = tokenizer.decode(prompt_ids, skip_special_tokens=False)
-    print(f"\nDebug - Decoded prompt:")
+    print("\nDebug - Decoded prompt:")
     print(f"  {repr(decoded[:200])}...")
 
     return torch.tensor([prompt_ids], dtype=torch.long)
@@ -209,8 +185,8 @@ def load_models(device: str, dtype: torch.dtype):
     print("⚠ This is a 3B parameter model - initial download may be large (~6GB)")
 
     try:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
         from snac import SNAC
+        from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError as e:
         raise ImportError(
             f"Required library not found: {e}\n"
@@ -225,16 +201,13 @@ def load_models(device: str, dtype: torch.dtype):
             "maya-research/maya1",
             dtype=dtype,
             device_map="auto" if device == "cuda" else None,
-            trust_remote_code=True
+            trust_remote_code=True,
         )
 
         if device != "cuda":
             model = model.to(device)
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            "maya-research/maya1",
-            trust_remote_code=True
-        )
+        tokenizer = AutoTokenizer.from_pretrained("maya-research/maya1", trust_remote_code=True)
 
         print("✓ Maya1 model loaded successfully")
 
@@ -285,9 +258,22 @@ def generate_voice(
     Returns:
         Path to generated audio file
     """
+    # Set defaults from config if not provided
+    if description is None:
+        description = config.get(
+            "voice_generation.default_voice", "30-year-old, neutral, medium pitch, clear"
+        )
+    if temperature is None:
+        temperature = config.get("voice_generation.temperature", 0.4)
+    if top_p is None:
+        top_p = config.get("voice_generation.top_p", 0.9)
+    if max_tokens is None:
+        max_tokens = config.get("voice_generation.max_tokens", 2048)
+    if output_dir is None:
+        output_dir = config.get("paths.output_dir", "output")
+
     # Create output directory
-    output_path = Path(output_dir)
-    output_path.mkdir(exist_ok=True)
+    output_path = ensure_output_dir(output_dir)
 
     # Get device and dtype
     device, dtype = get_device_and_dtype()
@@ -296,7 +282,7 @@ def generate_voice(
     model, tokenizer, snac_model = load_models(device, dtype)
 
     print(f"\n{'='*60}")
-    print(f"Generating speech...")
+    print("Generating speech...")
     print(f"Text: {text}")
     print(f"Voice: {description}")
     print(f"Temperature: {temperature}, Top-p: {top_p}")
@@ -308,9 +294,9 @@ def generate_voice(
     # Verify text is in the prompt
     decoded_prompt = tokenizer.decode(input_ids[0], skip_special_tokens=False)
     if text in decoded_prompt:
-        print(f"✓ Input text verified in prompt\n")
+        print("✓ Input text verified in prompt\n")
     else:
-        print(f"⚠ WARNING: Input text may not be in prompt!")
+        print("⚠ WARNING: Input text may not be in prompt!")
         print(f"Debug - Looking for: {repr(text)}\n")
 
     # Set random seed for reproducibility if provided
@@ -322,11 +308,11 @@ def generate_voice(
 
     # Generate SNAC tokens
     print("Generating audio tokens...")
-    print(f"Debug - Generation parameters:")
+    print("Debug - Generation parameters:")
     print(f"  Temperature: {temperature}")
     print(f"  Top-p: {top_p}")
     print(f"  Max new tokens: {max_tokens}")
-    print(f"  Repetition penalty: 1.1")
+    print("  Repetition penalty: 1.1")
     print()
 
     try:
@@ -343,7 +329,7 @@ def generate_voice(
                 no_repeat_ngram_size=3,  # Prevent repetitive patterns
             )
 
-        generated_ids = outputs[0, input_ids.shape[1]:].tolist()
+        generated_ids = outputs[0, input_ids.shape[1] :].tolist()
         print(f"✓ Generated {len(generated_ids)} tokens")
 
     except Exception as e:
@@ -360,14 +346,13 @@ def generate_voice(
     print(f"✓ Extracted {len(snac_tokens)} SNAC codes")
 
     levels = unpack_snac_from_7(snac_tokens)
-    print(f"✓ Unpacked to 3 hierarchical levels: {[len(l) for l in levels]}")
+    print(f"✓ Unpacked to 3 hierarchical levels: {[len(level) for level in levels]}")
 
     # Decode to audio
     print("Decoding to audio waveform...")
     try:
         codes_tensor = [
-            torch.tensor(level, dtype=torch.long, device=device).unsqueeze(0)
-            for level in levels
+            torch.tensor(level, dtype=torch.long, device=device).unsqueeze(0) for level in levels
         ]
 
         with torch.inference_mode():
@@ -390,18 +375,20 @@ def generate_voice(
 
     try:
         import soundfile as sf
+
         sf.write(str(audio_path), audio, 24000)
         print(f"✓ Audio saved: {audio_path}")
     except ImportError:
         # Fallback to scipy if soundfile not available
         from scipy.io import wavfile
+
         # Normalize to int16 range
         audio_int16 = (audio * 32767).astype(np.int16)
         wavfile.write(str(audio_path), 24000, audio_int16)
         print(f"✓ Audio saved (using scipy): {audio_path}")
 
     print(f"\n{'='*60}")
-    print(f"✓ Voice generation complete!")
+    print("✓ Voice generation complete!")
     print(f"Duration: {duration:.2f} seconds")
     print(f"File: {audio_path}")
     print(f"{'='*60}\n")
@@ -433,9 +420,9 @@ def main():
 
     # Generation settings
     settings = {
-        "temperature": 0.4,      # Lower = more consistent, higher = more varied
-        "top_p": 0.9,            # Nucleus sampling threshold
-        "max_tokens": 2048,      # Maximum audio tokens to generate
+        "temperature": 0.4,  # Lower = more consistent, higher = more varied
+        "top_p": 0.9,  # Nucleus sampling threshold
+        "max_tokens": 2048,  # Maximum audio tokens to generate
     }
 
     print("\n" + "=" * 60)
@@ -468,15 +455,13 @@ def main():
             seed = example.get("seed", None)
 
             audio_path = generate_voice(
-                text=example["text"],
-                description=example["description"],
-                seed=seed,
-                **settings
+                text=example["text"], description=example["description"], seed=seed, **settings
             )
             print(f"✓ Sample {i} saved to: {audio_path}")
         except Exception as e:
             print(f"❌ Failed to generate sample {i}: {e}")
             import traceback
+
             traceback.print_exc()
             continue
 
