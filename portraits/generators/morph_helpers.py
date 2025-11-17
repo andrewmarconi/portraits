@@ -46,31 +46,32 @@ def get_and_sort_images(input_dir, reverse=False):
 
 def detect_all_landmarks_wrapper(image_files):
     """Wrapper for landmark detection with error handling."""
-    from .morph import detect_face_landmarks, detect_pose_landmarks, combine_all_landmarks, add_hair_region_points
-    
+    from .morph import detect_face_landmarks, detect_pose_landmarks, combine_all_landmarks, add_hair_region_points, add_image_corners
+
     all_landmarks = []
-    
+
     for i, img_path in enumerate(image_files):
         print(f"🔍 Processing {img_path.name} ({i+1}/{len(image_files)})")
-        
+
         # Detect face landmarks
         face_landmarks = detect_face_landmarks(str(img_path))
         if face_landmarks is None:
             print(f"❌ No face detected in {img_path.name}")
             return None
-        
+
         # Detect pose landmarks
         pose_landmarks = detect_pose_landmarks(str(img_path))
-        
-        # Add hair region points
+
+        # Add hair region points and image corners
         img = cv2.imread(str(img_path))
         height, width = img.shape[:2]
         hair_points = add_hair_region_points(face_landmarks, height, width)
-        
+        corner_points = add_image_corners(height, width)
+
         # Combine all landmarks
-        all_points = combine_all_landmarks(face_landmarks, pose_landmarks, hair_points)
+        all_points = combine_all_landmarks(face_landmarks, pose_landmarks, hair_points, corner_points)
         all_landmarks.append(all_points)
-    
+
     return all_landmarks
 
 

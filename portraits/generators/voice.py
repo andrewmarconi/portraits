@@ -18,17 +18,44 @@ from portraits.generators.voice_helpers import (
     _process_snac_codes,
     _decode_audio_from_codes,
     _save_audio_file,
-    _print_voice_generation_summary
-)
-
-# Import main module functions
-from portraits.generators.voice import (
-    load_models,
-    build_prompt_ids
+    _print_voice_generation_summary,
 )
 
 
-def generate_voice_refactored(
+def load_models(device: str, dtype):
+    """Load Maya voice generation models."""
+    try:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        import snac
+    except ImportError:
+        raise ImportError(
+            "transformers and snac are required for voice generation. Install with: uv sync --extra voice"
+        )
+
+    try:
+        model_id = "mayaa-ai/Maya1"
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, torch_dtype=dtype, trust_remote_code=True
+        ).to(device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+
+        snac_model = snac.SNAC.from_pretrained("mayaa-ai/Maya1_SNAC").to(device)
+
+        return model, tokenizer, snac_model
+    except Exception as e:
+        raise RuntimeError(f"Failed to load models: {e}")
+
+
+def build_prompt_ids(text: str, voice_description: str, tokenizer):
+    """Build prompt IDs for voice generation."""
+    # Simple implementation - combine text and voice description
+    prompt = f"{voice_description}: {text}"
+    return tokenizer.encode(prompt, return_tensors="pt")
+
+
+def generate_voice(
     text: str,
     description: str = "30-year-old, neutral, medium pitch, clear",
     temperature: float = 0.4,
@@ -70,12 +97,12 @@ def generate_voice_refactored(
     model, tokenizer, snac_model = load_models(device, dtype)
 
     # Step 5: Print generation info
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Generating speech...")
     print(f"Text: {text}")
     print(f"Voice: {params['description']}")
     print(f"Temperature: {params['temperature']}, Top-p: {params['top_p']}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Step 6: Build prompt
     input_ids = build_prompt_ids(tokenizer, params["description"], text).to(device)
@@ -90,7 +117,13 @@ def generate_voice_refactored(
 
     # Step 8: Generate audio tokens
     generated_ids = _generate_audio_tokens(
-        model, tokenizer, input_ids, params["temperature"], params["top_p"], params["max_tokens"], seed
+        model,
+        tokenizer,
+        input_ids,
+        params["temperature"],
+        params["top_p"],
+        params["max_tokens"],
+        seed,
     )
 
     # Step 9: Process SNAC codes

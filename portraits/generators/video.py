@@ -6,6 +6,8 @@ This module contains the simplified generate_video() function that uses
 helper functions to reduce complexity from 18 to ~8.
 """
 
+from pathlib import Path
+
 # Import helper functions
 from portraits.generators.video_helpers import (
     _validate_video_inputs,
@@ -13,14 +15,41 @@ from portraits.generators.video_helpers import (
     _prepare_video_generation_environment,
     _generate_video_frames,
     _save_video_file,
-    _print_video_generation_summary
+    _print_video_generation_summary,
 )
 
-# Import main module functions
-from portraits.generators.video import load_pipeline
+
+def load_pipeline(model_id: str, device: str, dtype, enable_offload: bool = False):
+    """Load the SkyReels-V2 video generation pipeline."""
+    try:
+        from diffusers import DiffusionPipeline
+    except ImportError:
+        raise ImportError(
+            "diffusers is required for video generation. Install with: uv sync --extra video"
+        )
+
+    # Handle local model paths that don't exist
+    if model_id.startswith("./"):
+        local_path = model_id[2:]  # Remove "./"
+        if not Path(local_path).exists():
+            raise RuntimeError(
+                f"Local model not found: {local_path}. Please download the SkyReels-V2 model or use a public model."
+            )
+
+    try:
+        pipe = DiffusionPipeline.from_pretrained(model_id, torch_dtype=dtype, variant="fp16")
+
+        if enable_offload:
+            pipe.enable_sequential_cpu_offload()
+        else:
+            pipe = pipe.to(device)
+
+        return pipe
+    except Exception as e:
+        raise RuntimeError(f"Failed to load pipeline: {e}")
 
 
-def generate_video_refactored(
+def generate_video(
     prompt: str,
     model_id: str = None,
     num_frames: int = None,
@@ -54,13 +83,27 @@ def generate_video_refactored(
         Path to generated video file
     """
     # Step 1: Validate inputs
-    _validate_video_inputs(prompt, num_frames or 97, width or 960, height or 544, 
-                       fps or 24, guidance_scale or 6.0, num_inference_steps or 50)
+    _validate_video_inputs(
+        prompt,
+        num_frames or 97,
+        width or 960,
+        height or 544,
+        fps or 24,
+        guidance_scale or 6.0,
+        num_inference_steps or 50,
+    )
 
     # Step 2: Setup parameters with config defaults
     params = _setup_video_generation_params(
-        model_id, num_frames, width, height, fps, guidance_scale, 
-        num_inference_steps, enable_offload, output_dir
+        model_id,
+        num_frames,
+        width,
+        height,
+        fps,
+        guidance_scale,
+        num_inference_steps,
+        enable_offload,
+        output_dir,
     )
 
     # Step 3: Prepare environment
@@ -70,19 +113,27 @@ def generate_video_refactored(
     pipe = load_pipeline(params["model_id"], device, dtype, params["enable_offload"])
 
     # Step 5: Print generation info
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Generating video...")
     print(f"Prompt: {prompt}")
     print(f"Resolution: {params['width']}x{params['height']}")
-    print(f"Frames: {params['num_frames']} ({params['num_frames']/params['fps']:.1f}s at {params['fps']}fps)")
+    print(
+        f"Frames: {params['num_frames']} ({params['num_frames'] / params['fps']:.1f}s at {params['fps']}fps)"
+    )
     print(f"Inference steps: {params['num_inference_steps']}")
     print(f"Guidance scale: {params['guidance_scale']}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Step 6: Generate video frames
     frames = _generate_video_frames(
-        pipe, prompt, params["height"], params["width"], params["num_frames"],
-        params["guidance_scale"], params["num_inference_steps"], device
+        pipe,
+        prompt,
+        params["height"],
+        params["width"],
+        params["num_frames"],
+        params["guidance_scale"],
+        params["num_inference_steps"],
+        device,
     )
 
     # Step 7: Save video file
@@ -92,8 +143,14 @@ def generate_video_refactored(
 
     # Step 8: Print summary
     _print_video_generation_summary(
-        prompt, params["num_frames"], params["fps"], params["width"], params["height"],
-        params["guidance_scale"], params["num_inference_steps"], video_path
+        prompt,
+        params["num_frames"],
+        params["fps"],
+        params["width"],
+        params["height"],
+        params["guidance_scale"],
+        params["num_inference_steps"],
+        video_path,
     )
 
     return video_path
