@@ -54,7 +54,7 @@ Portraits is a comprehensive Python suite for AI-powered content generation, fea
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/portraits.git
+git clone https://github.com/andrewmarconi/portraits.git
 cd portraits
 
 # Install with uv (recommended)
@@ -69,14 +69,14 @@ pip install -r requirements.txt
 #### Command Line Interface
 
 ```bash
-# Launch the web interface (recommended)
+# Launch web interface (recommended)
 python main.py
 
-# Or use individual generators
-python generate_image.py
-python generate_video.py  
-python generate_voice.py
-python generate_morph_video.py
+# Command examples
+python main.py image --prompt "professional headshot of a woman"
+python main.py video --prompt "cinematic drone shot over mountains"
+python main.py voice --text "Hello world!" --voice "warm, friendly, medium pitch"
+python main.py morph --input images/ --output morphed.mp4
 ```
 
 #### Python API
@@ -272,7 +272,7 @@ portraits/
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/portraits.git
+git clone https://github.com/andrewmarconi/portraits.git
 cd portraits
 
 # Install development dependencies
@@ -359,8 +359,8 @@ generate_voice(
 ### Getting Help
 
 - **Documentation:** Check inline docstrings and examples
-- **Issues:** [GitHub Issues](https://github.com/yourusername/portraits/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/portraits/discussions)
+- **Issues:** [GitHub Issues](https://github.com/andrewmarconi/portraits/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/andrewmarconi/portraits/discussions)
 
 ## 📄 License
 
