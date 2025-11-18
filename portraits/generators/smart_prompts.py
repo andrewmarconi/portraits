@@ -165,17 +165,68 @@ class LLMVariableGenerator:
 
     def _generate_simple_values(self, variable_name: str, num_values: int) -> List[str]:
         """Simple rule-based generation for common variable types."""
-        # Common patterns
-        if 'color' in variable_name.lower():
+        var_lower = variable_name.lower()
+
+        # Hair/Color patterns
+        if 'hair' in var_lower or 'color' in var_lower or 'colour' in var_lower:
             return ['Blonde', 'Brunette', 'Red', 'Black', 'Auburn', 'Platinum', 'Silver', 'Grey', 'Brown', 'Copper']
-        elif 'ethnic' in variable_name.lower() or 'background' in variable_name.lower():
+
+        # Ethnicity/Background patterns
+        elif 'ethnic' in var_lower or 'background' in var_lower or 'descent' in var_lower or 'heritage' in var_lower:
             return ['Asian', 'European', 'African', 'Hispanic', 'Middle Eastern', 'Pacific Islander',
                    'Native American', 'South Asian', 'Caribbean', 'Mediterranean']
-        elif 'style' in variable_name.lower():
+
+        # Style/Aesthetic patterns
+        elif 'style' in var_lower or 'aesthetic' in var_lower or 'vibe' in var_lower:
             return ['Casual', 'Formal', 'Elegant', 'Sporty', 'Vintage', 'Modern', 'Classic', 'Bohemian', 'Minimalist', 'Eclectic']
+
+        # Age patterns
+        elif 'age' in var_lower or 'old' in var_lower or 'young' in var_lower:
+            return ['Child', 'Teen', 'Young Adult', 'Middle-aged', 'Senior', 'Elderly', 'Toddler', 'Adolescent', 'Mature', 'Ancient']
+
+        # Profession/Occupation patterns
+        elif 'job' in var_lower or 'profession' in var_lower or 'occupation' in var_lower or 'career' in var_lower:
+            return ['Doctor', 'Artist', 'Engineer', 'Teacher', 'Chef', 'Musician', 'Scientist', 'Writer', 'Lawyer', 'Designer']
+
+        # Emotion/Mood patterns
+        elif 'emotion' in var_lower or 'mood' in var_lower or 'feeling' in var_lower or 'expression' in var_lower:
+            return ['Happy', 'Sad', 'Angry', 'Peaceful', 'Excited', 'Mysterious', 'Confident', 'Thoughtful', 'Joyful', 'Melancholic']
+
+        # Animal patterns
+        elif 'animal' in var_lower or 'creature' in var_lower or 'beast' in var_lower:
+            return ['Cat', 'Dog', 'Dragon', 'Phoenix', 'Wolf', 'Eagle', 'Lion', 'Bear', 'Fox', 'Tiger']
+
+        # Location/Setting patterns
+        elif 'location' in var_lower or 'place' in var_lower or 'setting' in var_lower or 'scene' in var_lower:
+            return ['Forest', 'City', 'Beach', 'Mountain', 'Desert', 'Garden', 'Castle', 'Space', 'Ocean', 'Ruins']
+
+        # Time patterns
+        elif 'time' in var_lower or 'period' in var_lower or 'era' in var_lower or 'when' in var_lower:
+            return ['Morning', 'Afternoon', 'Evening', 'Night', 'Dawn', 'Dusk', 'Midnight', 'Noon', 'Sunset', 'Sunrise']
+
+        # Weather patterns
+        elif 'weather' in var_lower or 'climate' in var_lower or 'atmosphere' in var_lower:
+            return ['Sunny', 'Rainy', 'Cloudy', 'Stormy', 'Foggy', 'Snowy', 'Windy', 'Clear', 'Overcast', 'Misty']
+
+        # Material/Texture patterns
+        elif 'material' in var_lower or 'texture' in var_lower or 'surface' in var_lower:
+            return ['Metal', 'Wood', 'Stone', 'Fabric', 'Glass', 'Leather', 'Silk', 'Marble', 'Ceramic', 'Crystal']
+
+        # Size patterns
+        elif 'size' in var_lower or 'scale' in var_lower or 'big' in var_lower or 'small' in var_lower:
+            return ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Massive', 'Miniature', 'Giant', 'Colossal', 'Petite']
+
         else:
-            # Generic placeholder
-            return [f"Value {i+1}" for i in range(num_values)]
+            # For unknown patterns, try to infer from the variable name
+            # Split on underscore and use the parts to generate contextual values
+            parts = var_lower.split('_')
+            if len(parts) > 1:
+                # Use a generic but contextual approach
+                base = parts[-1] if parts[-1] not in ['type', 'kind', 'style'] else parts[-2] if len(parts) > 1 else parts[0]
+                return [f"{base.title()} {i+1}" for i in range(num_values)]
+            else:
+                # Completely generic fallback
+                return [f"{var_lower.title()} {i+1}" for i in range(num_values)]
 
     def _generate_from_openai(self, variable_name: str, context: str, num_values: int) -> List[str]:
         """Generate values using OpenAI API."""
