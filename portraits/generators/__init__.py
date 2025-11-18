@@ -5,6 +5,7 @@ _generate_headshot = None
 _generate_video = None
 _generate_voice = None
 _create_mesh_morphing_video = None
+_prompt_template = None
 
 # Image generation
 try:
@@ -38,6 +39,23 @@ try:
 except ImportError as e:
     print(f"Warning: Morph generation unavailable: {e}")
 
+# Prompt template generation
+try:
+    from .smart_prompts import (
+        SmartPromptTemplate,
+        LLMVariableGenerator,
+        create_smart_template,
+    )
+
+    _prompt_template = {
+        "SmartPromptTemplate": SmartPromptTemplate,
+        "LLMVariableGenerator": LLMVariableGenerator,
+        "create_smart_template": create_smart_template,
+    }
+except ImportError as e:
+    print(f"Warning: Prompt template generation unavailable: {e}")
+    _prompt_template = {}
+
 
 # Export available functions
 def get_available_generators():
@@ -54,11 +72,22 @@ def get_available_generators():
     return generators
 
 
+def get_prompt_tools():
+    """Get dictionary of available prompt tools."""
+    return _prompt_template or {}
+
+
 # Set the main functions if available
 generate_headshot = _generate_headshot
 generate_video = _generate_video
 generate_voice = _generate_voice
 create_mesh_morphing_video = _create_mesh_morphing_video
+
+# Set prompt tools if available
+if _prompt_template:
+    SmartPromptTemplate = _prompt_template["SmartPromptTemplate"]
+    LLMVariableGenerator = _prompt_template["LLMVariableGenerator"]
+    create_smart_template = _prompt_template["create_smart_template"]
 
 __all__ = [
     "generate_headshot",
@@ -66,4 +95,8 @@ __all__ = [
     "generate_voice",
     "create_mesh_morphing_video",
     "get_available_generators",
+    "get_prompt_tools",
+    "SmartPromptTemplate",
+    "LLMVariableGenerator",
+    "create_smart_template",
 ]
